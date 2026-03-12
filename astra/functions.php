@@ -202,3 +202,67 @@ require_once ASTRA_THEME_DIR . 'inc/core/markup/class-astra-markup.php';
 require_once ASTRA_THEME_DIR . 'inc/core/deprecated/deprecated-filters.php';
 require_once ASTRA_THEME_DIR . 'inc/core/deprecated/deprecated-hooks.php';
 require_once ASTRA_THEME_DIR . 'inc/core/deprecated/deprecated-functions.php';
+
+add_action('wp_footer', function () {
+    if (!is_product()) return;
+    ?>
+    <script>
+    jQuery(function ($) {
+        const $form = $('.variations_form');
+
+        if (!$form.length) return;
+
+        const $freza = $form.find('select[name="attribute_pa_%d1%84%d1%80%d0%b5%d0%b7%d0%b0"]');
+        const $tip   = $form.find('select[name="attribute_pa_%d1%82%d0%b8%d0%bf"]');
+
+        if (!$freza.length || !$tip.length) return;
+
+        const $tipRow = $tip.closest('tr');
+        if (!$tipRow.length) return;
+
+        const FREZA_YES  = '%d0%b4%d0%b0';
+        const FREZA_NO   = '%d0%bd%d0%b5%d1%82';
+        const TIP_WITHOUT = '%d0%b1%d0%b5%d0%b7-%d1%82%d0%b8%d0%bf%d0%b0';
+
+        let isUpdating = false;
+
+        function setTipValue(value) {
+            if ($tip.val() !== value) {
+                $tip.val(value).trigger('change');
+            }
+        }
+
+        function updateTipState() {
+            if (isUpdating) return;
+            isUpdating = true;
+
+            const frezaValue = $freza.val();
+
+            if (frezaValue === FREZA_YES) {
+                $tipRow.removeClass('is-hidden');
+
+                if ($tip.val() === TIP_WITHOUT) {
+                    setTipValue('');
+                }
+            } else if (frezaValue === FREZA_NO) {
+                $tipRow.addClass('is-hidden');
+                setTipValue(TIP_WITHOUT);
+            } else {
+                $tipRow.addClass('is-hidden');
+                setTipValue('');
+            }
+
+            isUpdating = false;
+        }
+
+        updateTipState();
+
+        $freza.on('change', updateTipState);
+
+        $form.on('reset_data', function () {
+            setTimeout(updateTipState, 0);
+        });
+    });
+    </script>
+    <?php
+});
