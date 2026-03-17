@@ -207,62 +207,160 @@ add_action('wp_footer', function () {
     if (!is_product()) return;
     ?>
     <script>
-    jQuery(function ($) {
-        const $form = $('.variations_form');
+        jQuery(function ($) {
+            const $form = $('.variations_form');
 
-        if (!$form.length) return;
+            if (!$form.length) return;
 
-        const $freza = $form.find('select[name="attribute_pa_%d1%84%d1%80%d0%b5%d0%b7%d0%b0"]');
-        const $tip   = $form.find('select[name="attribute_pa_%d1%82%d0%b8%d0%bf"]');
+            const CONFIG = {
+                controllerMaterial: 'attribute_pa_material',
+                controllerFreza: 'attribute_pa_freza',
+                dependentFreza: 'attribute_pa_freza',
+                dependentTip: 'attribute_pa_tip',
 
-        if (!$freza.length || !$tip.length) return;
-
-        const $tipRow = $tip.closest('tr');
-        if (!$tipRow.length) return;
-
-        const FREZA_YES  = '%d0%b4%d0%b0';
-        const FREZA_NO   = '%d0%bd%d0%b5%d1%82';
-        const TIP_WITHOUT = '%d0%b1%d0%b5%d0%b7-%d1%82%d0%b8%d0%bf%d0%b0';
-
-        let isUpdating = false;
-
-        function setTipValue(value) {
-            if ($tip.val() !== value) {
-                $tip.val(value).trigger('change');
-            }
-        }
-
-        function updateTipState() {
-            if (isUpdating) return;
-            isUpdating = true;
-
-            const frezaValue = $freza.val();
-
-            if (frezaValue === FREZA_YES) {
-                $tipRow.removeClass('is-hidden');
-
-                if ($tip.val() === TIP_WITHOUT) {
-                    setTipValue('');
+                values: {
+                    mdf: 'mdf',
+                    ldsp: 'ldsp',
+                    frezaYes: 'da',
+                    frezaNo: 'net',
+                    tipDefault: 'bez-tipa'
                 }
-            } else if (frezaValue === FREZA_NO) {
-                $tipRow.addClass('is-hidden');
-                setTipValue(TIP_WITHOUT);
-            } else {
-                $tipRow.addClass('is-hidden');
-                setTipValue('');
+            };
+
+            function getSelect(name) {
+                return $form.find(`select[name="${name}"]`);
             }
 
-            isUpdating = false;
-        }
+            function getRow(name) {
+                return getSelect(name).closest('tr');
+            }
 
-        updateTipState();
+            function getValue(name) {
+                return getSelect(name).val() || '';
+            }
 
-        $freza.on('change', updateTipState);
+            function showAttr(name) {
+                getRow(name).show();
+            }
 
-        $form.on('reset_data', function () {
-            setTimeout(updateTipState, 0);
+            function hideAttr(name) {
+                getRow(name).hide();
+            }
+
+            function syncUiForSelect(name, value) {
+                const $wrapper = $form.find(`.variable-items-wrapper[data-attribute_name="${name}"]`);
+                if (!$wrapper.length) return;
+
+                const $items = $wrapper.find('.variable-item');
+
+                $items.removeClass('selected').attr('aria-checked', 'false').attr('tabindex', '-1');
+
+                if (value) {
+                    const $target = $items.filter(`[data-value="${value}"]`);
+                    $target.addClass('selected').attr('aria-checked', 'true').attr('tabindex', '0');
+                }
+
+                const $label = getRow(name).find('.woo-selected-variation-item-name');
+                const $selectedItem = $items.filter(`[data-value="${value}"]`);
+                const title = $selectedItem.data('title') || '';
+
+                if ($label.length) {
+                    $label.text(title ? `: ${title}` : '');
+                }
+            }
+
+            function setValue(name, value) {
+                const $select = getSelect(name);
+                if (!$select.length) return;
+
+                if ($select.val() === value) {
+                    syncUiForSelect(name, value);
+                    return;
+                }
+
+                $select.val(value).trigger('change');
+                syncUiForSelect(name, value);
+            }
+
+            function clearValue(name) {
+                const $select = getSelect(name);
+                if (!$select.length) return;
+
+                if (!$select.val()) {
+                    syncUiForSelect(name, '');
+                    return;
+                }
+
+                $select.val('').trigger('change');
+                syncUiForSelect(name, '');
+            }
+
+            function updateVisibility() {
+                const material = getValue(CONFIG.controllerMaterial);
+                const freza = getValue(CONFIG.controllerFreza);
+
+                if (material === CONFIG.values.ldsp) {
+                    hideAttr(CONFIG.dependentFreza);
+                    hideAttr(CONFIG.dependentTip);
+
+                    setValue(CONFIG.dependentFreza, CONFIG.values.frezaNo);
+                    setValue(CONFIG.dependentTip, CONFIG.values.tipDefault);
+                    return;
+                }
+
+                if (material === CONFIG.values.mdf) {
+                    showAttr(CONFIG.dependentFreza);
+
+                    if (freza === CONFIG.values.frezaNo) {
+                        hideAttr(CONFIG.dependentTip);
+                        setValue(CONFIG.dependentTip, CONFIG.values.tipDefault);
+                        return;
+                    }
+
+                    if (freza === CONFIG.values.frezaYes) {
+                        showAttr(CONFIG.dependentTip);
+
+                        if (getValue(CONFIG.dependentTip) === CONFIG.values.tipDefault) {
+                            clearValue(CONFIG.dependentTip);
+                        }
+                        return;
+                    }
+
+                    hideAttr(CONFIG.dependentTip);
+                    clearValue(CONFIG.dependentTip);
+                    return;
+                }
+
+                hideAttr(CONFIG.dependentFreza);
+                hideAttr(CONFIG.dependentTip);
+                clearValue(CONFIG.dependentFreza);
+                clearValue(CONFIG.dependentTip);
+            }
+
+            $form.on('change', 'select', function () {
+                updateVisibility();
+            });
+
+            $form.on('click', '.variable-item', function () {
+                setTimeout(function () {
+                    updateVisibility();
+                }, 20);
+            });
+
+            $form.on('click', '.reset_variations', function () {
+                setTimeout(function () {
+                    updateVisibility();
+                }, 50);
+            });
+
+            $form.on('woocommerce_variation_has_changed found_variation reset_data', function () {
+                setTimeout(function () {
+                    updateVisibility();
+                }, 20);
+            });
+
+            updateVisibility();
         });
-    });
     </script>
     <?php
-});
+}, 100);
